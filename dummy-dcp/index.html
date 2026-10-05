@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FedHeart Dummy DCP</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  main { max-width: 1240px; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button.big { font-size: 15px; padding: 10px 22px; }
+  .hosp { border-top: 3px solid var(--c); padding: 14px 16px; }
+  .hosp h3 { margin: 0; font-size: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .hosp .folder { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 4px 0 10px; word-break: break-all; }
+  .hosp .rows { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 13px; margin: 10px 0 0; }
+  .hosp .rows dt { color: var(--muted); }
+  .hosp .rows dd { margin: 0; text-align: right; }
+  .hosp .err { color: var(--critical); font-size: 13px; margin-top: 8px; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink-2); user-select: none; }
+  .toggle input { width: 30px; height: 17px; appearance: none; border-radius: 999px; background: var(--axis); position: relative; cursor: pointer; margin: 0; transition: background 0.15s; }
+  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+  .toggle input:checked { background: var(--good-mark); }
+  .toggle input:checked::after { transform: translateX(13px); }
+  .toggle input:disabled { opacity: 0.4; cursor: not-allowed; }
+  .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 18px; }
+  .hero .value { font-size: 28px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: 16px; align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .logs { position: sticky; top: 16px; display: flex; flex-direction: column; max-height: calc(100vh - 32px); }
+  .logs ol { list-style: none; margin: 0; padding: 0; overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 1.45; min-height: 200px; }
+  .logs li { padding: 5px 0; border-bottom: 1px solid var(--grid); display: grid; grid-template-columns: 58px 1fr; gap: 8px; }
+  .logs time { color: var(--muted); }
+  .logs .src { font-weight: 700; margin-right: 6px; }
+  .logs li.warn .msg { color: color-mix(in srgb, var(--warning-mark) 60%, var(--ink)); }
+  .logs li.error .msg { color: var(--critical); }
+  .results td.label { display: flex; align-items: center; gap: 8px; }
+  .results tr.total td { font-weight: 650; border-bottom: 0; }
+  .empty-note { color: var(--muted); font-size: 14px; padding: 8px 0; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 280px; overflow: visible; }
+  .chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .gridline { stroke: var(--grid); stroke-width: 1; }
+  .chart .baseline { stroke: var(--axis); stroke-width: 1; }
+  .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .mean { stroke: var(--ink-2); stroke-dasharray: 5 4; }
+  .chart .end-label { fill: var(--ink-2); font-size: 12px; font-weight: 600; }
+  .chart .cross { stroke: var(--axis); stroke-width: 1; }
+  .chart .dropzone { fill: var(--critical); opacity: 0.07; }
+  .tip {
+    position: absolute; pointer-events: none; min-width: 190px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14); padding: 10px 12px; font-size: 13px;
+  }
+  .tip .t-head { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .tip .t-row { display: grid; grid-template-columns: 16px auto 1fr; gap: 8px; align-items: center; }
+  .tip .t-row b { font-variant-numeric: tabular-nums; }
+  .tip .t-row span:last-child { color: var(--ink-2); }
+  .empty { display: grid; place-items: center; height: 280px; color: var(--muted); font-size: 14px; text-align: center; }
+  .weights svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .weights .flabel { fill: var(--ink-2); font-size: 12.5px; }
+  .weights .bar { fill: var(--axis); }
+  .weights .zero { stroke: var(--muted); stroke-width: 1; }
+  .weights .pt { stroke: var(--surface); stroke-width: 2; }
+  .weights .row-hit { fill: transparent; }
+  .weights .row-hit:hover, .weights .row-hit:focus { fill: var(--ink); fill-opacity: 0.04; outline: none; }
+  .weights .dir { fill: var(--muted); font-size: 11.5px; }
+  .key.bar-key { width: 14px; height: 10px; border: 0; border-radius: 2px; background: var(--axis); }
+  .key.dot-key { width: 10px; height: 10px; border: 0; border-radius: 50%; background: currentColor; }
+  details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 10px; }
+  .settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 12px 16px; }
+  .settings .group { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+  .settings select, .settings input[type="number"] { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .settings input[type="number"] { width: 72px; }
+  .settings .note { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .received td.vals { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+  .received td.label, .personal td.label { display: flex; align-items: center; gap: 8px; }
+  .personal tr.total td { font-weight: 650; border-bottom: 0; }
+  .better { color: var(--good); font-weight: 600; }
+</style>
+</head>
+<body>
+<main class="stack">
+  <header class="top">
+    <div>
+      <div class="eyebrow">FedHeart · Dummy DCP</div>
+      <h1>Federated training across four hospital folders</h1>
+      <p class="sub" style="margin-top:4px">Each hospital is a separate worker process that reads only its own folder. Workers train locally and send back weights, and the coordinator averages them into one shared model.</p>
+    </div>
+    <div class="controls">
+      <span class="pill" id="phase"><span class="dot"></span><span>Connecting…</span></span>
+      <button id="restart">Clear &amp; restart</button>
+      <button class="primary big" id="start" disabled>Start training</button>
+    </div>
+  </header>
+  <div id="action-error" class="error" hidden></div>
+
+  <section class="card settings" aria-label="Privacy settings for the next run">
+    <label class="toggle" title="Hospitals mask their updates so the coordinator only learns the sum"><input type="checkbox" id="set-secure">Secure aggregation</label>
+    <label class="toggle" title="Each hospital adds noise during training and tracks its own privacy budget"><input type="checkbox" id="set-dp">Differential privacy</label>
+    <span class="group" id="dp-options">
+      <label for="set-noise">Noise</label>
+      <select id="set-noise"><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option></select>
+      <label for="set-budget">Budget ε</label>
+      <input type="number" id="set-budget" min="0.1" step="0.5" placeholder="none">
+    </span>
+    <span class="note" id="set-note"></span>
+  </section>
+
+  <section class="grid cols-4" id="hospitals"></section>
+
+  <div class="layout">
+    <div class="stack">
+      <section class="card">
+        <h2 id="results-title">Results</h2>
+        <div id="final" class="banner" hidden style="margin-bottom:16px"></div>
+        <div class="hero">
+          <div class="stat"><div class="label">Round</div><div class="value num" id="h-round">–</div></div>
+          <div class="stat"><div class="label">Hospitals in last round</div><div class="value num" id="h-hosp">–</div></div>
+          <div class="stat"><div class="label">Holdout AUC</div><div class="value num" id="h-auc">–</div></div>
+          <div class="stat"><div class="label">Holdout accuracy</div><div class="value num" id="h-acc">–</div></div>
+        </div>
+        <table class="results">
+          <thead><tr><th>Shared model scored on each hospital's held-out patients</th><th class="num">Patients</th><th class="num">AUC</th><th class="num">Accuracy</th></tr></thead>
+          <tbody id="results"></tbody>
+        </table>
+        <h2 style="margin-top:22px">AUC by round</h2>
+        <div class="legend" id="legend"></div>
+        <div class="chart" id="chart"><div class="empty">The chart fills in once training starts.</div></div>
+        <p class="muted" style="font-size:12.5px; margin-top:8px">Shaded rounds had at least one hospital drop out. "All" is the patient-weighted average of the hospitals that scored that round.</p>
+      </section>
+
+      <section class="card" id="personal-card" hidden>
+        <h2>Each hospital, on its own patients</h2>
+        <p class="sub" style="font-size:13.5px; margin-bottom:10px">After training, each hospital adapts the shared model to its own patients, on site, and keeps whichever version scores best in cross-validation on its own data. The personalized model never leaves the hospital; only these scores come back. Log loss measures how trustworthy the predicted risk percentages are: lower is better.</p>
+        <table class="personal">
+          <thead><tr><th>Hospital (held-out patients)</th><th>Chose</th><th class="num">Shared model</th><th class="num">Personalized</th></tr></thead>
+          <tbody id="personal"></tbody>
+        </table>
+        <p class="muted" style="font-size:12.5px; margin-top:8px">Log loss / accuracy. Switzerland has very few patients without heart disease, so its AUC isn't meaningful; log loss is.</p>
+      </section>
+
+      <section class="card">
+        <h2 id="received-title">What the coordinator received</h2>
+        <p class="sub" style="font-size:13.5px; margin-bottom:10px" id="received-desc"></p>
+        <table class="received">
+          <thead><tr><th>From</th><th>First 3 of the numbers it sent</th><th class="num">Count</th></tr></thead>
+          <tbody id="received"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>What the model learned: weight of each finding</h2>
+        <p class="sub" style="font-size:13.5px; margin-bottom:10px">Bars are the shared (averaged) model. Dots are each hospital's own update from the same round, before averaging. Right means the finding raises the predicted risk of heart disease, and left means it lowers it.</p>
+        <div class="legend" id="w-legend"></div>
+        <div class="chart weights" id="weights"><div class="empty" style="height:160px">Weights appear after the first round.</div></div>
+        <p class="muted" style="font-size:12.5px; margin-top:8px">Each weight is the change in log-odds for one standard deviation of that measure (or for a yes/no finding being present), so findings are directly comparable. Sorted by strength in the shared model; intercept not shown.</p>
+        <details><summary>Show as table</summary><div class="table-wrap" style="margin-top:8px"><table><thead id="w-head"></thead><tbody id="w-body"></tbody></table></div></details>
+      </section>
+    </div>
+
+    <section class="card logs">
+      <h2>Log</h2>
+      <ol id="log"></ol>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+import { FEATURES } from '/src/features.js';
+const $ = (id) => document.getElementById(id);
+const h = (tag, props = {}, ...children) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'style') el.style.cssText = v;
+    else if (k === 'class') el.className = v;
+    else el.setAttribute(k, v);
+  }
+  el.append(...children.filter((c) => c != null));
+  return el;
+};
+const SVG = 'http://www.w3.org/2000/svg';
+const s = (tag, attrs = {}) => {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+};
+const fmt = (x) => (Number.isFinite(x) ? x.toFixed(3) : 'n/a');
+const pct = (x) => (Number.isFinite(x) ? `${(x * 100).toFixed(1)}%` : 'n/a');
+
+let state = null;
+
+// ---- header + hospitals ----
+function renderHeader() {
+  const { phase, config, rows, hospitals } = state;
+  const ready = hospitals.filter((hp) => hp.available).length;
+  const [cls, text] =
+    phase === 'loading' ? ['warn', `Starting workers · ${ready}/4 ready`] :
+    phase === 'ready' ? ['good', `Ready · ${ready}/4 hospitals loaded`] :
+    phase === 'training' ? ['busy', `Training · round ${rows.length}/${config.rounds}`] :
+    ['good', 'Training complete'];
+  $('phase').querySelector('.dot').className = `dot ${cls}`;
+  $('phase').lastElementChild.textContent = text;
+  $('start').disabled = phase === 'training' || ready < config.minParticipants;
+  $('start').textContent = phase === 'done' ? 'Train again' : phase === 'training' ? 'Training…' : 'Start training';
+  $('start').title = ready < config.minParticipants ? `Needs at least ${config.minParticipants} hospitals with data` : '';
+}
+
+function workerState(hp) {
+  if (hp.worker === 'failed') return ['bad', 'Failed to load'];
+  if (hp.worker === 'starting') return ['busy', 'Starting worker'];
+  if (hp.worker === 'stopped') return ['bad', 'Worker stopped'];
+  if (!hp.online) return ['bad', 'Offline'];
+  if (state.phase === 'training') return ['busy', 'Training'];
+  return ['good', state.phase === 'done' ? 'Finished' : 'Ready'];
+}
+
+// epsilon adds up over every DP run since the worker loaded its data. Any
+// run without DP is not covered, which the card says alongside.
+function privacyText(p) {
+  if (!p) return '–';
+  if (p.spent) return `ε ${p.spent.epsilon.toFixed(2)} (δ ${p.spent.delta})${p.trainedWithoutDp ? ' · plus runs without DP' : ''}`;
+  if (p.trainedWithoutDp) return 'Not private (trained without DP)';
+  return p.dp ? 'ε 0 so far' : '–';
+}
+
+function renderHospitals() {
+  const last = state.rows.at(-1);
+  $('hospitals').replaceChildren(...state.hospitals.map((hp) => {
+    const [cls, text] = workerState(hp);
+    const sum = hp.summary;
+    const row = (k, v) => [h('dt', {}, k), h('dd', { class: 'num' }, v)];
+    const toggle = h('input', { type: 'checkbox', 'aria-label': `${hp.label} online` });
+    toggle.checked = hp.online;
+    toggle.disabled = hp.worker !== 'ready';
+    toggle.addEventListener('change', () => post(`/online?site=${hp.site}`, { online: toggle.checked }));
+    return h('article', { class: 'card hosp', style: `--c: var(--s-${hp.site})` },
+      h('h3', {}, h('span', { style: 'display:inline-flex; align-items:center; gap:8px' }, h('span', { class: 'key', style: `color: var(--s-${hp.site})` }), hp.label),
+        h('label', { class: 'toggle', title: 'Simulate this hospital dropping off the network' }, toggle, hp.online ? 'Online' : 'Offline')),
+      h('div', { class: 'folder' }, hp.folder),
+      h('span', { class: 'pill' }, h('span', { class: `dot ${cls}` }), h('span', {}, text)),
+      hp.error ? h('div', { class: 'err' }, hp.error) : null,
+      h('dl', { class: 'rows' },
+        ...row('File', sum ? sum.file : '–'),
+        ...row('Patients', sum ? `${sum.rows}${sum.skipped ? ` (${sum.skipped} unreadable)` : ''}` : '–'),
+        ...row('Train / held out', sum ? `${sum.train} / ${sum.holdout}` : '–'),
+        ...row('Disease rate', sum ? pct(sum.diseaseRate) : '–'),
+        ...row('Last round', !last ? '–' : last.responded.includes(hp.site) ? 'Contributed' : 'Dropped'),
+        ...row('Privacy spent', privacyText(hp.privacy)),
+      ),
+    );
+  }));
+}
+
+// ---- results ----
+function renderResults() {
+  const { phase, config, rows, final, hospitals } = state;
+  const last = rows.at(-1);
+  $('h-round').textContent = last ? `${last.round}/${config.rounds}` : `0/${config.rounds}`;
+  $('h-hosp').textContent = last ? `${last.responded.length}/4` : '–';
+  $('h-auc').textContent = last ? fmt(last.mean.auc) : '–';
+  $('h-acc').textContent = last ? pct(last.mean.accuracy) : '–';
+  $('results-title').textContent = phase === 'done' ? 'Final results' : phase === 'training' ? 'Results (live)' : 'Results';
+
+  $('final').hidden = !final;
+  if (final) {
+    const modes = [final.settings.secure && 'secure aggregation', final.settings.dp && `differential privacy (noise ${final.settings.noiseMultiplier})`].filter(Boolean);
+    const gain = final.personalized.personalized.n
+      ? ` Personalizing on site took log loss from ${fmt(final.personalized.shared.logLoss)} to ${fmt(final.personalized.personalized.logLoss)}.`
+      : '';
+    $('final').textContent = `Training complete in ${final.seconds.toFixed(1)} s${modes.length ? `, with ${modes.join(' and ')}` : ''}. ` +
+      `The shared model scores AUC ${fmt(final.mean.auc)} and ${pct(final.mean.accuracy)} accuracy across ${final.mean.n} held-out patients, and no patient rows left any hospital folder.${gain} Saved to ${final.file}.`;
+  }
+
+  if (!last) {
+    $('results').replaceChildren(h('tr', {}, h('td', { colspan: 4, class: 'empty-note' }, 'Press Start training to run the job. Results appear here after each round.')));
+    return;
+  }
+  const evals = last.evals;
+  $('results').replaceChildren(
+    ...hospitals.map((hp) => {
+      const e = evals[hp.site];
+      return h('tr', {},
+        h('td', { class: 'label' }, h('span', { class: 'key', style: `color: var(--s-${hp.site})` }), hp.label),
+        h('td', { class: 'num' }, e ? String(e.n) : '–'),
+        h('td', { class: 'num' }, e ? fmt(e.auc) : 'not scored'),
+        h('td', { class: 'num' }, e ? pct(e.accuracy) : '–'));
+    }),
+    h('tr', { class: 'total' },
+      h('td', {}, 'All hospitals (patient-weighted)'),
+      h('td', { class: 'num' }, String(last.mean.n)),
+      h('td', { class: 'num' }, fmt(last.mean.auc)),
+      h('td', { class: 'num' }, pct(last.mean.accuracy))),
+  );
+}
+
+// ---- log ----
+const SOURCE_COLOR = (src) => (src === 'coordinator' ? 'var(--ink)' : `var(--s-${src})`);
+function addLog(entry, scroll = true) {
+  const list = $('log');
+  const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+  const label = entry.source === 'coordinator' ? 'coordinator' : state?.hospitals.find((hp) => hp.site === entry.source)?.label ?? entry.source;
+  const time = new Date(entry.t).toLocaleTimeString([], { hour12: false });
+  list.append(h('li', { class: entry.level },
+    h('time', {}, time),
+    h('span', {}, h('span', { class: 'src', style: `color: ${SOURCE_COLOR(entry.source)}` }, label), h('span', { class: 'msg' }, entry.text))));
+  while (list.children.length > 400) list.firstElementChild.remove();
+  if (scroll && nearBottom) list.scrollTop = list.scrollHeight;
+}
+
+function renderSettings() {
+  const { settings, rounds, secureMin } = state.config;
+  const locked = state.phase === 'training';
+  $('set-secure').checked = settings.secure;
+  $('set-dp').checked = settings.dp;
+  $('set-noise').value = String(settings.noiseMultiplier);
+  if (document.activeElement !== $('set-budget')) $('set-budget').value = settings.epsilonBudget ?? '';
+  for (const id of ['set-secure', 'set-dp', 'set-noise', 'set-budget']) $(id).disabled = locked || (id !== 'set-secure' && id !== 'set-dp' && !settings.dp);
+  $('dp-options').style.opacity = settings.dp ? 1 : 0.45;
+  const parts = [`${locked ? 'This run' : 'Next run'}: ${rounds} rounds`];
+  if (settings.secure) parts.push(`secure aggregation needs ${secureMin} hospitals`);
+  if (settings.dp) parts.push('DP uses fewer rounds, since each one costs privacy');
+  $('set-note').textContent = parts.join(' · ');
+}
+
+function renderReceived() {
+  const r = state.received;
+  const sites = state.hospitals.filter((hp) => r[hp.site]);
+  const round = sites.length ? Math.max(...sites.map((hp) => r[hp.site].round)) : null;
+  const masked = sites.some((hp) => r[hp.site].masked);
+  $('received-title').textContent = round ? `What the coordinator received in round ${round}` : 'What the coordinator received';
+  $('received-desc').textContent = !round
+    ? 'Each hospital\'s message to the coordinator appears here once training starts.'
+    : masked
+    ? 'Secure aggregation is on: each hospital masked its update with secrets it shares with the others, so each message looks like random numbers. Only their sum, which the coordinator can compute, is meaningful.'
+    : 'Secure aggregation is off: the coordinator sees each hospital\'s own model weights. Switch it on to hide them.';
+  if (!round) return $('received').replaceChildren(h('tr', {}, h('td', { colspan: 3, class: 'empty-note' }, 'Nothing received yet.')));
+  $('received').replaceChildren(...sites.map((hp) => {
+    const m = r[hp.site];
+    const vals = m.masked ? m.preview.join('  ') : m.preview.map((w) => (w >= 0 ? '+' : '−') + Math.abs(w).toFixed(4)).join('  ');
+    const stale = m.round !== round ? ` (round ${m.round})` : m.attempt > 1 ? ` (re-run ${m.attempt})` : '';
+    return h('tr', {},
+      h('td', { class: 'label' }, h('span', { class: 'key', style: `color: var(--s-${hp.site})` }), hp.label + stale),
+      h('td', { class: 'vals' }, vals + '  …'),
+      h('td', { class: 'num' }, `${m.count} ${m.masked ? 'masked' : 'weights'}`));
+  }));
+}
+
+function renderPersonalization() {
+  const p = state.personalization;
+  $('personal-card').hidden = !p;
+  if (!p) return;
+  const cell = (m) => `${fmt(m.logLoss)} / ${pct(m.accuracy)}`;
+  const rowsOut = state.hospitals.filter((hp) => p[hp.site]).map((hp) => {
+    const r = p[hp.site];
+    const gained = r.personalized.logLoss < r.shared.logLoss - 1e-9;
+    return h('tr', {},
+      h('td', { class: 'label' }, h('span', { class: 'key', style: `color: var(--s-${hp.site})` }), hp.label),
+      h('td', {}, r.label),
+      h('td', { class: 'num' }, cell(r.shared)),
+      h('td', { class: `num${gained ? ' better' : ''}` }, cell(r.personalized)));
+  });
+  const f = state.final?.personalized;
+  if (f) {
+    rowsOut.push(h('tr', { class: 'total' }, h('td', {}, 'All hospitals (patient-weighted)'), h('td', {}, ''),
+      h('td', { class: 'num' }, cell(f.shared)), h('td', { class: 'num' }, cell(f.personalized))));
+  }
+  $('personal').replaceChildren(...rowsOut);
+}
+
+function render() {
+  renderHeader();
+  renderSettings();
+  renderHospitals();
+  renderResults();
+  renderReceived();
+  renderPersonalization();
+  renderChart();
+  renderWeights();
+}
+
+function renderLegend() {
+  $('legend').replaceChildren(
+    ...state.hospitals.map((hp) => h('span', {}, h('span', { class: 'key', style: `color: var(--s-${hp.site})` }), hp.label)),
+    h('span', {}, h('span', { class: 'key dashed', style: 'color: var(--ink-2)' }), 'All (patient-weighted)'),
+  );
+}
+
+function renderChart() {
+  const { rows, config, hospitals } = state;
+  const box = $('chart');
+  if (!rows.length) {
+    if (!box.querySelector('.empty')) box.replaceChildren(h('div', { class: 'empty' }, 'The chart fills in once training starts.'));
+    return;
+  }
+  const W = box.clientWidth || 800;
+  const H = 280;
+  const m = { top: 12, right: 44, bottom: 26, left: 40 };
+  const values = rows.flatMap((r) => [r.mean.auc, ...Object.values(r.evals).map((e) => e.auc)]).filter(Number.isFinite);
+  const lo = Math.max(0, Math.min(0.5, Math.floor((Math.min(...values) - 0.02) * 10) / 10));
+  const hi = 1;
+  const x = (round) => m.left + ((round - 1) / Math.max(1, config.rounds - 1)) * (W - m.left - m.right);
+  const y = (v) => m.top + (1 - (v - lo) / (hi - lo)) * (H - m.top - m.bottom);
+
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Global model AUC per hospital by round' });
+  for (let v = lo; v <= hi + 1e-9; v += 0.1) {
+    svg.append(s('line', { class: 'gridline', x1: m.left, x2: W - m.right, y1: y(v), y2: y(v) }));
+    const t = s('text', { class: 'tick', x: m.left - 8, y: y(v) + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(1);
+    svg.append(t);
+  }
+  svg.append(s('line', { class: 'baseline', x1: m.left, x2: W - m.right, y1: H - m.bottom, y2: H - m.bottom }));
+  const step = config.rounds <= 12 ? 1 : config.rounds <= 30 ? 5 : 10;
+  for (let r = 1; r <= config.rounds; r++) {
+    if (r !== 1 && r % step !== 0) continue;
+    const t = s('text', { class: 'tick', x: x(r), y: H - m.bottom + 16, 'text-anchor': 'middle' });
+    t.textContent = r;
+    svg.append(t);
+  }
+  const half = (W - m.left - m.right) / Math.max(1, config.rounds - 1) / 2;
+  for (const r of rows) {
+    if (r.dropped.length) svg.append(s('rect', { class: 'dropzone', x: x(r.round) - half, width: half * 2, y: m.top, height: H - m.top - m.bottom }));
+  }
+
+  const line = (points) => {
+    let d = '';
+    let pen = false;
+    for (const [round, v] of points) {
+      if (!Number.isFinite(v)) { pen = false; continue; }
+      d += `${pen ? 'L' : 'M'}${x(round).toFixed(1)},${y(v).toFixed(1)}`;
+      pen = true;
+    }
+    return d;
+  };
+  for (const hp of hospitals) {
+    const d = line(rows.map((r) => [r.round, r.evals[hp.site]?.auc]));
+    if (d) svg.append(s('path', { class: 'series', d, stroke: `var(--s-${hp.site})` }));
+  }
+  const meanD = line(rows.map((r) => [r.round, r.mean.auc]));
+  svg.append(s('path', { class: 'series mean', d: meanD }));
+  const lastMean = rows.at(-1).mean.auc;
+  if (Number.isFinite(lastMean)) {
+    const t = s('text', { class: 'end-label', x: x(rows.at(-1).round) + 8, y: y(lastMean) + 4 });
+    t.textContent = 'All';
+    svg.append(t);
+  }
+
+  const cross = s('line', { class: 'cross', y1: m.top, y2: H - m.bottom, visibility: 'hidden' });
+  svg.append(cross);
+  const hit = s('rect', { x: m.left - half, y: 0, width: W - m.left - m.right + half * 2, height: H, fill: 'transparent', tabindex: 0 });
+  svg.append(hit);
+  const tip = h('div', { class: 'tip', hidden: '' });
+
+  const show = (round) => {
+    const r = rows.find((row) => row.round === round);
+    if (!r) return hide();
+    cross.setAttribute('x1', x(round));
+    cross.setAttribute('x2', x(round));
+    cross.setAttribute('visibility', 'visible');
+    const tRow = (color, value, name, dashed) =>
+      h('div', { class: 't-row' }, h('span', { class: `key${dashed ? ' dashed' : ''}`, style: `color: ${color}` }), h('b', {}, value), h('span', {}, name));
+    tip.replaceChildren(
+      h('div', { class: 't-head' }, `Round ${round} · ${r.responded.length}/4 hospitals trained`),
+      tRow('var(--ink-2)', fmt(r.mean.auc), 'All', true),
+      ...hospitals.map((hp) => tRow(`var(--s-${hp.site})`, r.evals[hp.site] ? fmt(r.evals[hp.site].auc) : 'n/a', `${hp.label}${r.dropped.some((d) => d.name === hp.site) ? ' (dropped)' : ''}`)),
+    );
+    tip.hidden = false;
+    const px = (x(round) / W) * box.clientWidth;
+    tip.style.left = `${Math.min(px + 12, box.clientWidth - tip.offsetWidth)}px`;
+    tip.style.top = '8px';
+    if (px + 12 + tip.offsetWidth > box.clientWidth) tip.style.left = `${Math.max(0, px - tip.offsetWidth - 12)}px`;
+  };
+  const hide = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+  let focused = rows.at(-1).round;
+  hit.addEventListener('pointermove', (e) => {
+    const rect = svg.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * W;
+    const round = Math.round(((px - m.left) / (W - m.left - m.right)) * (config.rounds - 1)) + 1;
+    focused = Math.min(rows.at(-1).round, Math.max(1, round));
+    show(focused);
+  });
+  hit.addEventListener('pointerleave', hide);
+  hit.addEventListener('focus', () => show(focused));
+  hit.addEventListener('blur', hide);
+  hit.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') focused = Math.max(1, focused - 1);
+    else if (e.key === 'ArrowRight') focused = Math.min(rows.at(-1).round, focused + 1);
+    else return;
+    e.preventDefault();
+    show(focused);
+  });
+  box.replaceChildren(svg, tip);
+}
+
+// ---- weights ----
+const FEATURE_LABELS = {
+  age: 'Age', sex: 'Male',
+  cp_typical: 'Chest pain: typical angina', cp_atypical: 'Chest pain: atypical angina',
+  cp_nonanginal: 'Chest pain: non-anginal', cp_asymptomatic: 'Chest pain: none (asymptomatic)',
+  trestbps: 'Resting blood pressure', chol: 'Cholesterol', chol_missing: 'Cholesterol not measured',
+  fbs: 'Fasting blood sugar > 120', fbs_missing: 'Blood sugar not measured',
+  restecg_normal: 'Resting ECG: normal', restecg_st: 'Resting ECG: ST-T abnormality', restecg_lvh: 'Resting ECG: LV hypertrophy',
+  thalach: 'Max heart rate', thalach_missing: 'Max heart rate not measured',
+  exang: 'Exercise-induced angina', oldpeak: 'ST depression on exercise',
+};
+const signed = (w) => (Number.isFinite(w) ? `${w >= 0 ? '+' : '−'}${Math.abs(w).toFixed(2)}` : 'n/a');
+const odds = (w) => `×${Math.exp(w).toFixed(2)} odds`;
+
+function renderWeights() {
+  const view = state.weights;
+  const box = $('weights');
+  const sites = view ? state.hospitals.filter((hp) => view.hospitals[hp.site]) : [];
+  $('w-legend').replaceChildren(
+    h('span', {}, h('span', { class: 'key bar-key' }), view ? `Shared model, round ${view.round}` : 'Shared model'),
+    ...(view?.secure ? [h('span', {}, 'Each hospital\'s own update is hidden by secure aggregation, so only the shared model is shown.')] : state.hospitals.map((hp) =>
+      h('span', { style: view && !view.hospitals[hp.site] ? 'opacity:0.45' : '' },
+        h('span', { class: 'key dot-key', style: `color: var(--s-${hp.site})` }),
+        view && !view.hospitals[hp.site] ? `${hp.label} (not in this round)` : hp.label))),
+  );
+  if (!view) {
+    if (!box.querySelector('.empty')) box.replaceChildren(h('div', { class: 'empty', style: 'height:160px' }, 'Weights appear after the first round.'));
+    $('w-head').replaceChildren();
+    $('w-body').replaceChildren();
+    return;
+  }
+
+  const features = FEATURES.map((name, j) => ({
+    name, label: FEATURE_LABELS[name] ?? name, global: view.global[j],
+    hospitals: sites.map((hp) => ({ hp, w: view.hospitals[hp.site][j] })),
+  })).sort((a, b) => Math.abs(b.global) - Math.abs(a.global));
+
+  const W = box.clientWidth || 800;
+  const rowH = 26;
+  const m = { top: 22, right: 16, bottom: 8, left: Math.min(230, Math.max(150, W * 0.36)) };
+  const H = m.top + features.length * rowH + m.bottom;
+  const extent = Math.max(0.1, ...features.flatMap((f) => [Math.abs(f.global), ...f.hospitals.map((d) => Math.abs(d.w))])) * 1.08;
+  const x = (w) => m.left + ((w + extent) / (2 * extent)) * (W - m.left - m.right);
+
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': 'Weight of each finding in the shared model and in each hospital update' });
+  const dirL = s('text', { class: 'dir', x: x(0) - 8, y: 12, 'text-anchor': 'end' });
+  dirL.textContent = '← lowers risk';
+  const dirR = s('text', { class: 'dir', x: x(0) + 8, y: 12 });
+  dirR.textContent = 'raises risk →';
+  svg.append(dirL, dirR);
+
+  const tip = h('div', { class: 'tip', hidden: '' });
+  features.forEach((f, i) => {
+    const cy = m.top + i * rowH + rowH / 2;
+    const g = s('g');
+    const hit = s('rect', { class: 'row-hit', x: 0, y: cy - rowH / 2, width: W, height: rowH, rx: 4, tabindex: 0 });
+    const label = s('text', { class: 'flabel', x: m.left - 12, y: cy + 4, 'text-anchor': 'end' });
+    label.textContent = f.label;
+    const x0 = x(0);
+    const x1 = x(f.global);
+    const bar = s('rect', { class: 'bar', x: Math.min(x0, x1), y: cy - 6, width: Math.max(1, Math.abs(x1 - x0)), height: 12, rx: 3 });
+    g.append(hit, label, bar);
+    f.hospitals.forEach(({ hp, w }, k) => {
+      const dy = (k - (f.hospitals.length - 1) / 2) * 3; // nudge so overlapping dots stay visible
+      g.append(s('circle', { class: 'pt', cx: x(w), cy: cy + dy, r: 4.5, fill: `var(--s-${hp.site})` }));
+    });
+    const show = () => {
+      tip.replaceChildren(
+        h('div', { class: 't-head' }, f.label),
+        h('div', { class: 't-row' }, h('span', { class: 'key bar-key' }), h('b', {}, signed(f.global)), h('span', {}, `Shared model · ${odds(f.global)}`)),
+        ...f.hospitals.map(({ hp, w }) =>
+          h('div', { class: 't-row' }, h('span', { class: 'key dot-key', style: `color: var(--s-${hp.site})` }), h('b', {}, signed(w)), h('span', {}, hp.label))),
+      );
+      tip.hidden = false;
+      const scale = box.clientWidth / W;
+      tip.style.top = `${(cy + rowH / 2 + 4) * scale}px`;
+      tip.style.left = `${Math.max(0, Math.min(x(0) * scale - tip.offsetWidth / 2, box.clientWidth - tip.offsetWidth))}px`;
+    };
+    const hide = () => { tip.hidden = true; };
+    hit.addEventListener('pointerenter', show);
+    hit.addEventListener('pointerleave', hide);
+    hit.addEventListener('focus', show);
+    hit.addEventListener('blur', hide);
+    svg.append(g);
+  });
+  svg.append(s('line', { class: 'zero', x1: x(0), x2: x(0), y1: m.top - 4, y2: H - m.bottom }));
+  box.replaceChildren(svg, tip);
+
+  $('w-head').replaceChildren(h('tr', {}, h('th', {}, 'Finding'), h('th', { class: 'num' }, 'Shared'), ...sites.map((hp) => h('th', { class: 'num' }, hp.label))));
+  $('w-body').replaceChildren(...features.map((f) =>
+    h('tr', {}, h('td', {}, f.label), h('td', { class: 'num' }, signed(f.global)), ...f.hospitals.map(({ w }) => h('td', { class: 'num' }, signed(w))))));
+}
+
+// ---- live updates ----
+let first = true;
+const events = new EventSource('/events');
+events.addEventListener('state', (e) => {
+  state = JSON.parse(e.data);
+  if (first) {
+    first = false;
+    renderLegend();
+    $('log').replaceChildren();
+    for (const entry of state.logs) addLog(entry, false);
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+  render();
+});
+events.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
+events.addEventListener('clear', () => $('log').replaceChildren());
+events.addEventListener('open', () => { first = true; });
+events.addEventListener('error', () => {
+  $('phase').querySelector('.dot').className = 'dot bad';
+  $('phase').lastElementChild.textContent = 'Coordinator not reachable';
+  $('start').disabled = true;
+});
+
+async function post(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  $('action-error').hidden = res.ok;
+  if (!res.ok) $('action-error').textContent = await res.text();
+}
+$('start').addEventListener('click', () => post('/start'));
+$('set-secure').addEventListener('change', (e) => post('/settings', { secure: e.target.checked }));
+$('set-dp').addEventListener('change', (e) => post('/settings', { dp: e.target.checked }));
+$('set-noise').addEventListener('change', (e) => post('/settings', { noiseMultiplier: Number(e.target.value) }));
+$('set-budget').addEventListener('change', (e) => post('/settings', { epsilonBudget: e.target.value === '' ? null : Number(e.target.value) }));
+$('restart').addEventListener('click', () => {
+  if (state?.phase === 'training' && !confirm('Training is running. Stop it, clear the results and restart the workers?')) return;
+  post('/restart');
+});
+addEventListener('resize', () => { if (state) { renderChart(); renderWeights(); } });
+</script>
+</body>
+</html>

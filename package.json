@@ -1,0 +1,26 @@
+{
+  "name": "fedheart",
+  "version": "0.1.0",
+  "description": "Federated logistic regression across hospitals without moving patient data. Runs locally or on Distributive's Compute Platform (DCP).",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./dcp": "./src/dcp.js"
+  },
+  "files": ["src", "data/raw", "README.md"],
+  "scripts": {
+    "test": "node --test",
+    "baselines": "node scripts/baselines.js",
+    "federated": "node scripts/federated.js",
+    "demo": "node scripts/demo.js",
+    "dcp": "node scripts/dcp-round.js",
+    "privacy": "node scripts/privacy.js",
+    "dummy-dcp": "node scripts/dummy-dcp.js"
+  },
+  "engines": { "node": ">=20" },
+  "keywords": ["federated-learning", "fedavg", "dcp", "distributive", "logistic-regression", "healthcare"],
+  "license": "MIT",
+  "peerDependencies": { "dcp-client": "*", "dcp-worker": "*" },
+  "peerDependenciesMeta": { "dcp-client": { "optional": true }, "dcp-worker": { "optional": true } }
+}
